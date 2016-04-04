@@ -319,9 +319,10 @@ cell_t *cell;
 		if (to->cell->block->type == '*') {
 			baloneys_found++;
 			if (baloneys_found == baloneys_n) {
-				for (cell = to->cell->from; cell; cell = cell->from) {
+				for (cell = to->cell->from; cell->from; cell = cell->from) {
 					cell->block->type = cell->block->type == '.' ? cell->direction:toupper(cell->direction);
 				}
+				cell->block->type = toupper(cell->direction)+1;
 				printf("%lu\n", path_len);
 				b = 0;
 				for (i = 0; i < height; i++) {
