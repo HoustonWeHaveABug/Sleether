@@ -14,8 +14,8 @@ typedef struct link_s link_t;
 
 struct cell_s {
 	block_t *block;
-	unsigned long value;
 	int visited;
+	unsigned long path_min;
 	unsigned long links_n;
 	link_t *links;
 	cell_t *from;
@@ -34,13 +34,12 @@ int yx_link(block_t *, cell_t *, int);
 int add_link(cell_t *, cell_t *, int);
 void set_link(link_t *, cell_t *, int);
 void bfs_path(cell_t *, cell_t *);
-void bfs_test_link(cell_t *, link_t *);
-int sort_links(const void *, const void *);
+void bfs_test_link(cell_t *, cell_t *);
 void dfs_path(unsigned long, cell_t *);
 void dfs_test_link(cell_t *, link_t *, unsigned long);
 void free_cells(void);
 
-unsigned long height, width, blocks_n, cells_n, baloneys_n, queue_size, path_len_min, baloneys_found;
+unsigned long height, width, blocks_n, cells_n, baloneys_n, queue_size, path_min, path_low, baloneys_found;
 block_t *blocks;
 cell_t *cells, *cell_start, **baloneys, **queue;
 
@@ -129,14 +128,15 @@ unsigned long b, c, i, j;
 		}
 	}
 	free(queue);
-	for (i = 0; i < cells_n; i++) {
-		qsort(cells[i].links, cells[i].links_n, sizeof(link_t), sort_links);
-	}
 	cell_start->visited = 1;
 	cell_start->from = NULL;
-	path_len_min = cells_n;
+	path_min = cells_n;
+	path_low = 0;
+	for (i = 0; i < baloneys_n; i++) {
+		path_low += baloneys[i]->path_min;
+	}
 	baloneys_found = 0;
-	dfs_path(1UL, cell_start);
+	dfs_path(0UL, cell_start);
 	free_cells();
 	free(blocks);
 	return EXIT_SUCCESS;
@@ -193,8 +193,8 @@ cell_t **baloneys_tmp;
 		}
 		baloneys[baloneys_n++] = cell;
 	}
-	cell->value = 0;
 	cell->visited = 0;
+	cell->path_min = cells_n;
 	cell->links_n = 0;
 	if (y && yx_links(block-width, cell, 'd', 'u')) {
 		return 1;
@@ -250,7 +250,7 @@ void set_link(link_t *link, cell_t *cell, int direction) {
 }
 
 void bfs_path(cell_t *from, cell_t *to) {
-unsigned long i, j, value;
+unsigned long path_len, i, j;
 cell_t *cell;
 	from->visited = 1;
 	from->from = NULL;
@@ -258,20 +258,19 @@ cell_t *cell;
 	queue_size = 1;
 	for (i = 0; i < queue_size && queue[i] != to; i++) {
 		for (j = 0; j < queue[i]->links_n; j++) {
-			bfs_test_link(queue[i], queue[i]->links+j);
+			bfs_test_link(queue[i], queue[i]->links[j].cell);
 		}
 	}
 	if (i < queue_size) {
-		value = 1;
+		path_len = 0;
 		for (cell = queue[i]; cell->from; cell = cell->from) {
-			if (cell->block->type == '*') {
-				value++;
-			}
+			path_len++;
 		}
-		for (cell = queue[i]; cell; cell = cell->from) {
-			if (cell->value < value) {
-				cell->value = value;
-			}
+		if (path_len < from->path_min) {
+			from->path_min = path_len;
+		}
+		if (path_len < to->path_min) {
+			to->path_min = path_len;
 		}
 	}
 	for (i = 0; i < queue_size; i++) {
@@ -279,32 +278,19 @@ cell_t *cell;
 	}
 }
 
-void bfs_test_link(cell_t *from, link_t *to) {
-	if (!to->cell->visited) {
-		to->cell->visited = 1;
-		to->cell->from = from;
-		queue[queue_size++] = to->cell;
-	}
-}
-
-int sort_links(const void *a, const void *b) {
-const link_t *link_a = (const link_t *)a, *link_b = (const link_t *)b;
-	if (link_a->cell->value < link_b->cell->value) {
-		return 1;
-	}
-	else if (link_a->cell->value > link_b->cell->value) {
-		return -1;
-	}
-	else {
-		return 0;
+void bfs_test_link(cell_t *from, cell_t *to) {
+	if (!to->visited) {
+		to->visited = 1;
+		to->from = from;
+		queue[queue_size++] = to;
 	}
 }
 
 void dfs_path(unsigned long path_len, cell_t *cell) {
 unsigned long i;
-	if (path_len <= path_len_min-baloneys_n+baloneys_found) {
+	if (path_len+path_low <= path_min) {
 		for (i = 0; i < cell->links_n; i++) {
-			dfs_test_link(cell, cell->links+i, path_len);
+			dfs_test_link(cell, cell->links+i, path_len+1);
 		}
 	}
 }
@@ -317,12 +303,13 @@ cell_t *cell;
 		to->cell->visited = 1;
 		to->cell->from = from;
 		if (to->cell->block->type == '*') {
+			path_low -= to->cell->path_min;
 			baloneys_found++;
 			if (baloneys_found == baloneys_n) {
 				for (cell = to->cell->from; cell->from; cell = cell->from) {
 					cell->block->type = cell->block->type == '.' ? cell->direction:toupper(cell->direction);
 				}
-				cell->block->type = toupper(cell->direction)+1;
+				cell->block->type = toupper(cell->direction)-1;
 				printf("%lu\n", path_len);
 				b = 0;
 				for (i = 0; i < height; i++) {
@@ -331,11 +318,11 @@ cell_t *cell;
 					}
 					puts("");
 				}
-				path_len_min = path_len;
+				path_min = path_len;
 			}
 		}
 		if (baloneys_found < baloneys_n) {
-			dfs_path(path_len+1, to->cell);
+			dfs_path(path_len, to->cell);
 		}
 		if (to->cell->block->type == '*') {
 			if (baloneys_found == baloneys_n) {
@@ -345,6 +332,7 @@ cell_t *cell;
 				cell->block->type = 'S';
 			}
 			baloneys_found--;
+			path_low += to->cell->path_min;
 		}
 		to->cell->visited = 0;
 	}
