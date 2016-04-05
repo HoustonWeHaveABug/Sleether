@@ -37,11 +37,13 @@ void bfs_path(cell_t *, cell_t *);
 void bfs_test_link(cell_t *, cell_t *);
 void dfs_path(unsigned long, cell_t *);
 void dfs_test_link(cell_t *, link_t *, unsigned long);
+void dfs_backtrack(cell_t *, cell_t *, unsigned long);
+void set_low_bound(void);
 void free_cells(void);
 
-unsigned long height, width, blocks_n, cells_n, baloneys_n, queue_size, path_min, path_low, baloneys_found;
+unsigned long height, width, blocks_n, cells_n, baloneys_n, queue_size, path_min, baloneys_found, path_low1, path_low2;
 block_t *blocks;
-cell_t *cells, *cell_start, **baloneys, **queue;
+cell_t *cells, *cell_start, **baloneys, **queue, *cell_low2;
 
 int main(void) {
 unsigned long b, c, i, j;
@@ -131,11 +133,8 @@ unsigned long b, c, i, j;
 	cell_start->visited = 1;
 	cell_start->from = NULL;
 	path_min = cells_n;
-	path_low = 0;
-	for (i = 0; i < baloneys_n; i++) {
-		path_low += baloneys[i]->path_min;
-	}
 	baloneys_found = 0;
+	set_low_bound();
 	dfs_path(0UL, cell_start);
 	free_cells();
 	free(blocks);
@@ -288,7 +287,7 @@ void bfs_test_link(cell_t *from, cell_t *to) {
 
 void dfs_path(unsigned long path_len, cell_t *cell) {
 unsigned long i;
-	if (path_len+path_low <= path_min) {
+	if (path_len+path_low1+path_low2 < path_min) {
 		for (i = 0; i < cell->links_n; i++) {
 			dfs_test_link(cell, cell->links+i, path_len+1);
 		}
@@ -296,46 +295,74 @@ unsigned long i;
 }
 
 void dfs_test_link(cell_t *from, link_t *to, unsigned long path_len) {
-unsigned long b, i, j;
-cell_t *cell;
 	if (!to->cell->visited) {
 		from->direction = to->direction;
-		to->cell->visited = 1;
-		to->cell->from = from;
-		if (to->cell->block->type == '*') {
-			path_low -= to->cell->path_min;
-			baloneys_found++;
-			if (baloneys_found == baloneys_n) {
-				for (cell = to->cell->from; cell->from; cell = cell->from) {
-					cell->block->type = cell->block->type == '.' ? cell->direction:toupper(cell->direction);
-				}
-				cell->block->type = toupper(cell->direction)-1;
-				printf("%lu\n", path_len);
-				b = 0;
-				for (i = 0; i < height; i++) {
-					for (j = 0; j < width; j++, b++) {
-						putchar(blocks[b].type);
-					}
-					puts("");
-				}
-				path_min = path_len;
-			}
-		}
-		if (baloneys_found < baloneys_n) {
-			dfs_path(path_len, to->cell);
-		}
-		if (to->cell->block->type == '*') {
-			if (baloneys_found == baloneys_n) {
-				for (cell = to->cell->from; cell->from; cell = cell->from) {
-					cell->block->type = islower(cell->block->type) ? '.':'*';
-				}
-				cell->block->type = 'S';
-			}
-			baloneys_found--;
-			path_low += to->cell->path_min;
-		}
-		to->cell->visited = 0;
+		dfs_backtrack(from, to->cell, path_len);
 	}
+}
+
+void dfs_backtrack(cell_t *from, cell_t *to, unsigned long path_len) {
+unsigned long path_low1_back = path_low1, path_low2_back = path_low2, b, i, j;
+cell_t *cell_low2_back = cell_low2, *cell;
+	to->visited = 1;
+	to->from = from;
+	if (to->block->type == '*') {
+		baloneys_found++;
+		if (baloneys_found < baloneys_n) {
+			set_low_bound();
+		}
+		else {
+			for (cell = to->from; cell->from; cell = cell->from) {
+				cell->block->type = cell->block->type == '.' ? cell->direction:toupper(cell->direction);
+			}
+			cell->block->type = toupper(cell->direction)-1;
+			printf("%lu\n", path_len);
+			b = 0;
+			for (i = 0; i < height; i++) {
+				for (j = 0; j < width; j++, b++) {
+					putchar(blocks[b].type);
+				}
+				puts("");
+			}
+			for (cell = to->from; cell->from; cell = cell->from) {
+				cell->block->type = islower(cell->block->type) ? '.':'*';
+			}
+			cell->block->type = 'S';
+			path_min = path_len;
+		}
+	}
+	else {
+		if (path_low2) {
+			path_low2--;
+		}
+	}
+	if (baloneys_found < baloneys_n) {
+		dfs_path(path_len, to);
+	}
+	if (to->block->type == '*') {
+		baloneys_found--;
+	}
+	to->visited = 0;
+	path_low2 = path_low2_back;
+	cell_low2 = cell_low2_back;
+	path_low1 = path_low1_back;
+}
+
+void set_low_bound(void) {
+unsigned long i;
+	for (i = 0; i < baloneys_n && baloneys[i]->visited; i++);
+	path_low1 = baloneys[i]->path_min;
+	cell_low2 = baloneys[i];
+	for (i++; i < baloneys_n; i++) {
+		if (!baloneys[i]->visited) {
+			path_low1 += baloneys[i]->path_min;
+			if (baloneys[i]->path_min > cell_low2->path_min) {
+				cell_low2 = baloneys[i];
+			}
+		}
+	}
+	path_low2 = cell_low2->path_min-1;
+	path_low1 -= path_low2;
 }
 
 void free_cells(void) {
