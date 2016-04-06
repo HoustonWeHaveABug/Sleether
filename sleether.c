@@ -19,20 +19,22 @@ struct cell_s {
 	unsigned long links_n;
 	link_t *links;
 	cell_t *from;
+	int direction_s;
 	int direction;
 };
 
 struct link_s {
 	cell_t *cell;
+	int direction_s;
 	int direction;
 };
 
 int set_block(block_t *, int);
 int set_cell(cell_t *, unsigned long, unsigned long, block_t *);
-int yx_links(block_t *, cell_t *, int, int);
-int yx_link(block_t *, cell_t *, int);
-int add_link(cell_t *, cell_t *, int);
-void set_link(link_t *, cell_t *, int);
+int yx_links(block_t *, cell_t *, int, int, int, int);
+int yx_link(block_t *, cell_t *, int, int);
+int add_link(cell_t *, cell_t *, int, int);
+void set_link(link_t *, cell_t *, int, int);
 void bfs_path(cell_t *, cell_t *);
 void bfs_test_link(cell_t *, cell_t *);
 void dfs_path(unsigned long, cell_t *);
@@ -195,30 +197,30 @@ cell_t **baloneys_tmp;
 	cell->visited = 0;
 	cell->path_min = cells_n;
 	cell->links_n = 0;
-	if (y && yx_links(block-width, cell, 'd', 'u')) {
+	if (y && yx_links(block-width, cell, 'v', 'd', '^', 'u')) {
 		return 1;
 	}
-	if (x && yx_links(block-1, cell, 'r', 'l')) {
-		return 1;
-	}
-	return 0;
-}
-
-int yx_links(block_t *remote, cell_t *cell, int direction1, int direction2) {
-	if (yx_link(remote, cell, direction1)) {
-		return 1;
-	}
-	if (remote->cell && yx_link(cell->block, remote->cell, direction2)) {
+	if (x && yx_links(block-1, cell, '>', 'r', '<', 'l')) {
 		return 1;
 	}
 	return 0;
 }
 
-int yx_link(block_t *block1, cell_t *cell2, int direction) {
-	return block1->type != 'O' ? add_link(block1->cell, cell2, direction):0;
+int yx_links(block_t *remote, cell_t *cell, int direction_s1, int direction1, int direction_s2, int direction2) {
+	if (yx_link(remote, cell, direction_s1, direction1)) {
+		return 1;
+	}
+	if (remote->cell && yx_link(cell->block, remote->cell, direction_s2, direction2)) {
+		return 1;
+	}
+	return 0;
 }
 
-int add_link(cell_t *cell1, cell_t *cell2, int direction) {
+int yx_link(block_t *block1, cell_t *cell2, int direction_s, int direction) {
+	return block1->type != 'O' ? add_link(block1->cell, cell2, direction_s, direction):0;
+}
+
+int add_link(cell_t *cell1, cell_t *cell2, int direction_s, int direction) {
 link_t *links_tmp;
 	if (cell1->links_n) {
 		links_tmp = realloc(cell1->links, sizeof(link_t)*(cell1->links_n+1));
@@ -238,13 +240,14 @@ link_t *links_tmp;
 			return 1;
 		}
 	}
-	set_link(cell1->links+cell1->links_n, cell2, direction);
+	set_link(cell1->links+cell1->links_n, cell2, direction_s, direction);
 	cell1->links_n++;
 	return 0;
 }
 
-void set_link(link_t *link, cell_t *cell, int direction) {
+void set_link(link_t *link, cell_t *cell, int direction_s, int direction) {
 	link->cell = cell;
+	link->direction_s = direction_s;
 	link->direction = direction;
 }
 
@@ -296,6 +299,7 @@ unsigned long i;
 
 void dfs_test_link(cell_t *from, link_t *to, unsigned long path_len) {
 	if (!to->cell->visited) {
+		from->direction_s = to->direction_s;
 		from->direction = to->direction;
 		dfs_backtrack(from, to->cell, path_len);
 	}
@@ -315,7 +319,7 @@ cell_t *cell_low2_back = cell_low2, *cell;
 			for (cell = to->from; cell->from; cell = cell->from) {
 				cell->block->type = cell->block->type == '.' ? cell->direction:toupper(cell->direction);
 			}
-			cell->block->type = toupper(cell->direction)-1;
+			cell->block->type = cell->direction_s;
 			printf("%lu\n", path_len);
 			b = 0;
 			for (i = 0; i < height; i++) {
